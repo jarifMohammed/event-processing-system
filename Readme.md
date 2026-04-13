@@ -98,8 +98,3 @@ POST /orders
 - Unique constraint ensures idempotency
 - Graceful shutdown prevents message loss
 
----
-
-## Author
-
-Created by Sayeed Anwar — [github.com/iamharryda](https://github.com/iamharryda)
