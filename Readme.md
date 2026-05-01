@@ -100,6 +100,3 @@ POST /orders
 
 ---
 
-## Author
-
-Created by Sayeed Anwar — [github.com/iamharryda](https://github.com/iamharryda)
