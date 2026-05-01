@@ -3,7 +3,7 @@ package main
 import (
 	"context"
 	"encoding/json"
-	"log"
+	"log/slog"
 	"net/http"
 	"os"
 	"os/signal"
@@ -17,7 +17,9 @@ import (
 )
 
 func main() {
-	log.SetFlags(log.LstdFlags | log.Lshortfile)
+	// Initialize structured logging with JSON handler
+	logger := slog.New(slog.NewJSONHandler(os.Stdout, nil))
+	slog.SetDefault(logger)
 
 	writer := kafka.NewWriter(kafka.WriterConfig{
 		Brokers: []string{"localhost:9092"},
@@ -28,6 +30,7 @@ func main() {
 	http.HandleFunc("/orders", func(w http.ResponseWriter, r *http.Request) {
 
 		if r.Method != http.MethodPost {
+			slog.Warn("method not allowed", "method", r.Method)
 			http.Error(w, "Method not allowed", http.StatusMethodNotAllowed)
 			return
 		}
@@ -39,11 +42,13 @@ func main() {
 
 		err := json.NewDecoder(r.Body).Decode(&body)
 		if err != nil {
+			slog.Error("invalid json request", "error", err)
 			http.Error(w, "Invalid JSON", http.StatusBadRequest)
 			return
 		}
 
 		if body.UserID == "" || body.Amount <= 0 {
+			slog.Warn("invalid input data", "user_id", body.UserID, "amount", body.Amount)
 			http.Error(w, "Invalid input", http.StatusBadRequest)
 			return
 		}
@@ -57,6 +62,7 @@ func main() {
 
 		data, err := json.Marshal(event)
 		if err != nil {
+			slog.Error("failed to serialize event", "event_id", event.EventID, "error", err)
 			http.Error(w, "Failed to serialize event", 500)
 			return
 		}
@@ -69,9 +75,12 @@ func main() {
 		)
 
 		if err != nil {
+			slog.Error("failed to publish event to kafka", "event_id", event.EventID, "error", err)
 			http.Error(w, "Failed to publish event", 500)
 			return
 		}
+
+		slog.Info("event published", "event_id", event.EventID, "user_id", event.UserID)
 
 		w.Header().Set("Content-Type", "application/json")
 		json.NewEncoder(w).Encode(map[string]string{
@@ -85,9 +94,10 @@ func main() {
 	}
 
 	go func() {
-		log.Println("Producer running on :8081")
+		slog.Info("Producer API running", "addr", ":8081")
 		if err := server.ListenAndServe(); err != nil && err != http.ErrServerClosed {
-			log.Fatalf("Server error: %v", err)
+			slog.Error("server failed", "error", err)
+			os.Exit(1)
 		}
 	}()
 
@@ -96,11 +106,13 @@ func main() {
 	signal.Notify(quit, syscall.SIGINT, syscall.SIGTERM)
 	<-quit
 
-	log.Println("Shutting down producer...")
+	slog.Info("shutting down producer...")
 
 	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 	defer cancel()
 
-	server.Shutdown(ctx)
-	log.Println("Producer exited cleanly")
+	if err := server.Shutdown(ctx); err != nil {
+		slog.Error("forced shutdown", "error", err)
+	}
+	slog.Info("producer exited cleanly")
 }

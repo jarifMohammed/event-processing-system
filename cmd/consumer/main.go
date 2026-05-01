@@ -2,7 +2,7 @@ package main
 
 import (
 	"context"
-	"log"
+	"log/slog"
 	"os"
 	"os/signal"
 	"syscall"
@@ -15,12 +15,15 @@ import (
 )
 
 func main() {
-	log.SetFlags(log.LstdFlags | log.Lshortfile)
+	// Initialize structured logging
+	logger := slog.New(slog.NewJSONHandler(os.Stdout, nil))
+	slog.SetDefault(logger)
 
 	dbpool, err := pgxpool.New(context.Background(),
 		"postgres://postgres:pass@localhost:5433/events")
 	if err != nil {
-		log.Fatal(err)
+		slog.Error("failed to connect to database", "error", err)
+		os.Exit(1)
 	}
 	defer dbpool.Close()
 
@@ -33,10 +36,11 @@ func main() {
 	})
 	defer reader.Close()
 
-	log.Println("Consumer started...")
+	slog.Info("Consumer service started", "topic", "orders.created", "group", "order-processor-group")
 
 	jobs := make(chan []byte, 100)
 
+	// Start worker pool
 	for i := 0; i < 5; i++ {
 		go processor.Worker(repo, jobs, i)
 	}
@@ -49,14 +53,14 @@ func main() {
 
 	go func() {
 		<-quit
-		log.Println("Shutting down consumer...")
+		slog.Info("shutting down consumer...")
 		cancel()
 	}()
 
 	for {
 		select {
 		case <-ctx.Done():
-			log.Println("Consumer stopped gracefully")
+			slog.Info("consumer stopped gracefully")
 			return
 		default:
 			msg, err := reader.ReadMessage(ctx)
@@ -64,7 +68,7 @@ func main() {
 				if ctx.Err() != nil {
 					return
 				}
-				log.Printf("Kafka read error: %v", err)
+				slog.Error("kafka read error", "error", err)
 				continue
 			}
 			jobs <- msg.Value

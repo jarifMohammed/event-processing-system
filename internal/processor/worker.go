@@ -2,7 +2,8 @@ package processor
 
 import (
 	"encoding/json"
-	"log"
+	"log/slog"
+	"math"
 	"time"
 
 	"event-processing-system/internal/model"
@@ -11,7 +12,7 @@ import (
 
 func Worker(repo *repository.EventRepository, jobs <-chan []byte, id int) {
 	for job := range jobs {
-		log.Printf("Worker %d processing event", id)
+		slog.Info("worker processing event", "worker_id", id)
 		processWithRetry(repo, job)
 	}
 }
@@ -21,20 +22,27 @@ func processWithRetry(repo *repository.EventRepository, data []byte) {
 
 	err := json.Unmarshal(data, &event)
 	if err != nil {
-		log.Printf("JSON error: %v", err)
+		slog.Error("failed to unmarshal event", "error", err)
 		return
 	}
 
 	for i := 0; i < 3; i++ {
 		err = repo.Insert(event)
 		if err == nil {
-			log.Printf("Event %s processed", event.EventID)
+			slog.Info("event processed successfully", "event_id", event.EventID, "user_id", event.UserID)
 			return
 		}
 
-		log.Printf("Retry %d for event %s", i+1, event.EventID)
-		time.Sleep(2 * time.Second)
+		// Exponential Backoff: 2^i * 1 second (1s, 2s, 4s...)
+		backoff := time.Duration(math.Pow(2, float64(i))) * time.Second
+		slog.Warn("retry processing event", 
+			"retry_count", i+1, 
+			"event_id", event.EventID, 
+			"backoff_seconds", backoff.Seconds(),
+			"error", err,
+		)
+		time.Sleep(backoff)
 	}
 
-	log.Printf("Failed permanently: %s", event.EventID)
+	slog.Error("failed to process event after max retries", "event_id", event.EventID)
 }

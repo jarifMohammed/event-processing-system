@@ -1,17 +1,18 @@
 # Event Processing System
 
-Kafka-based event-driven processing system built with Go and PostgreSQL.
+Kafka-based event-driven processing system built with Go and PostgreSQL. Designed as a deep dive into **System Design patterns** for high-scale, resilient architectures.
 
 ---
 
 ## Features
 
-- Producer API publishes order events to Kafka
-- Consumer group processes events asynchronously
-- Worker pool for controlled concurrency
-- Retry logic for fault tolerance
-- Idempotent database inserts (unique event_id)
-- Graceful shutdown support
+- **Producer API**: Publishes order events to Kafka with structured logging.
+- **Consumer Group**: Scalable event processing using Kafka Consumer Groups.
+- **Bounded Worker Pool**: Controlled concurrency using fixed-size goroutine pools.
+- **Exponential Backoff**: Resilient retry logic for database operations.
+- **Idempotent Inserts**: Ensures data integrity using unique event constraints.
+- **Structured Logging**: JSON-formatted logs for production observability.
+- **Graceful Shutdown**: Prevents data loss during system termination.
 
 ---
 
@@ -20,25 +21,34 @@ Kafka-based event-driven processing system built with Go and PostgreSQL.
 ```
 Client  
 ↓  
-Producer (Go API)  
+Producer (Go API + JSON Logging)  
 ↓  
 Kafka Topic (orders.created)  
 ↓  
-Consumer Group (Worker Pool)  
+Consumer Group (Worker Pool + Backoff)  
 ↓  
-PostgreSQL
+PostgreSQL (Idempotent Storage)
 ```
+
+---
+
+## System Design Patterns Implemented
+
+- **Event-Driven Architecture (EDA)**: Decoupling services via Kafka to improve responsiveness and scalability.
+- **Backpressure Management**: Using bounded channels and worker pools to prevent service exhaustion.
+- **Exactly-Once Semantics (at Storage Layer)**: Implementing idempotency via Postgres unique constraints to handle "at-least-once" delivery.
+- **Resiliency**: Using Exponential Backoff (1s, 2s, 4s...) to handle transient failures gracefully.
+- **Observability**: Implementing Structured Logging (JSON) to enable centralized log analysis and monitoring.
 
 ---
 
 ## Tech Stack
 
-- Go
-- Kafka
-- PostgreSQL
-- Docker
-- pgxpool
-- kafka-go
+- **Language**: Go (Golang)
+- **Message Broker**: Apache Kafka
+- **Database**: PostgreSQL
+- **Infrastructure**: Docker & Docker Compose
+- **Libraries**: `pgxpool`, `kafka-go`, `slog` (Standard Library)
 
 ---
 
@@ -87,16 +97,3 @@ POST /orders
   "amount": 100
 }
 ```
-
----
-
-## Design Highlights
-
-- Decoupled producer and consumer via Kafka
-- Bounded worker pool prevents uncontrolled goroutines
-- Retry mechanism ensures reliability
-- Unique constraint ensures idempotency
-- Graceful shutdown prevents message loss
-
----
-
